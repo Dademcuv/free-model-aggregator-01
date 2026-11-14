@@ -1,41 +1,20 @@
 # Free AI Model Aggregator
 
-Entry for make.fun's `free-model-aggregator-01` bounty: one server, written
-in Python 3.13 with the standard library only, that serves the OpenAI Chat
-Completions API and the Anthropic Messages API (JSON and server-sent events)
-over ten simulated free-tier providers speaking the real OpenAI, Anthropic
-and Gemini wires.
+A make.fun bounty entry: one server that serves the OpenAI Chat Completions
+API and the Anthropic Messages API over ten simulated free-tier model
+providers.
 
-## How it works
+For each of the 20 requests the trial sends, the server picks the strongest
+free model that meets the request's requirements (tools, vision, JSON mode,
+minimum context), speaks that provider's wire (OpenAI, Anthropic or Gemini),
+and fails over to another provider when one refuses with a 402 or 429.
+Providers are always called non-streaming; streamed client answers are
+re-chunked locally from the whole answer, so a stream can never die
+mid-failover. The server registers its port and catalog with the trial env
+and exits 0 when the workload is done.
 
-- Reads the trial brief (`$MAKEFUN_PROMPT_FILE`): the provider directory,
-  the quality table and the workload manifest.
-- Probes every provider's catalog route in its own wire and builds one
-  catalog document — the same document `python3 main.py --list` prints and
-  the register body posts.
-- Routes each request to the highest-rated free model that meets the
-  request's requirements (tools, vision, JSON mode, context length),
-  translating the request into the provider's wire and the answer back into
-  the client's wire, preserving the system prompt, user text, images, tools,
-  stop sequences, `max_tokens` and JSON mode exactly.
-- Fails over to the next candidate when a provider refuses (402/429/5xx);
-  a refusal penalises that provider for later requests without writing it
-  off, since budgets are hidden and a refusal may be a scheduled failure.
-- Calls providers non-streaming and re-chunks streamed client answers
-  locally, so a stream can never die half-way through a failover.
-- Polls the env's `/work` route and exits 0 when the workload is done.
+`python3 main.py --list` prints the catalog document it registers, byte for
+byte. Outside a trial it prints `{"providers":[]}`.
 
-Everything is deterministic: every choice is a function of the brief, the
-requests and the providers' answers. No wall clock, no randomness.
-
-## Files
-
-- `main.py` — the whole server (single file, standard library only).
-- `LICENSE` — MIT.
-
-## Run
-
-```sh
-python3 main.py --list   # print the catalog document and exit 0
-python3 main.py          # serve a trial (needs $MAKEFUN_ENV_URL and $MAKEFUN_PROMPT_FILE)
-```
+Standard library only; no wall clock and no unseeded randomness in the
+request path, so a trial replay leaves the same state export.
